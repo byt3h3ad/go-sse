@@ -39,16 +39,16 @@ func handleTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	timeChannel := make(chan string)
+	timeChannel := make(chan []byte)
 	go sendTimeUpdates(r.Context(), timeChannel)
 
 	for t := range timeChannel {
-		fmt.Fprint(w, t+"\n\n")
+		fmt.Fprintf(w, "%s\n\n", t)
 		flusher.Flush()
 	}
 }
 
-func sendTimeUpdates(ctx context.Context, timeChannel chan<- string) {
+func sendTimeUpdates(ctx context.Context, timeChannel chan<- []byte) {
 	ticker := time.NewTicker(2 * time.Second)
 
 	for i := 0; i < 10; i++ {
@@ -62,7 +62,7 @@ func sendTimeUpdates(ctx context.Context, timeChannel chan<- string) {
 				log.Printf("Error marshalling JSON: %v", err)
 				continue
 			}
-			timeChannel <- string(data)
+			timeChannel <- data
 		}
 	}
 
