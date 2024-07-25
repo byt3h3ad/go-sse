@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -38,31 +39,34 @@ func handleTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	done := make(chan bool)
-	go func() {
-		<-r.Context().Done()
-		close(done)
-	}()
+	timeChannel := make(chan string)
+	go sendTimeUpdates(r.Context(), timeChannel)
+
+	for t := range timeChannel {
+		fmt.Fprint(w, t+"\n\n")
+		flusher.Flush()
+	}
+}
+
+func sendTimeUpdates(ctx context.Context, timeChannel chan<- string) {
+	ticker := time.NewTicker(2 * time.Second)
 
 	for i := 0; i < 10; i++ {
 		select {
-		case <-done:
+		case <-ctx.Done():
 			return
-		default:
-			update := Update{Event: "update time", Data: TimeUpdate{Number: i, Time: time.Now().Format(time.RFC1123)}}
-			data, err := json.Marshal(update)
+		case <-ticker.C:
+			update := Update{Event: "update time", Data: TimeUpdate{Number: i + 1, Time: time.Now().Format(time.RFC1123)}}
+			data, err := json.MarshalIndent(update, "", "  ")
 			if err != nil {
 				log.Printf("Error marshalling JSON: %v", err)
 				continue
 			}
-			fmt.Fprintf(w, "%s\n\n", data)
-			flusher.Flush()
-			time.Sleep(2 * time.Second)
+			timeChannel <- string(data)
 		}
 	}
 
-	close := Update{Event: "close time", Data: TimeUpdate{Number: -1, Time: time.Now().Format(time.RFC1123)}}
-	data, _ := json.Marshal(close)
-	fmt.Fprintf(w, "%s\n", data)
-	flusher.Flush()
+	ticker.Stop()
+	close(timeChannel)
+	fmt.Println("Finished")
 }
